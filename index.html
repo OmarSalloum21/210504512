@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>StudentProject Dapp</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin:0; background:#0f172a; color:#e2e8f0; }
+    .wrap { max-width: 900px; margin: 2rem auto; padding: 1.25rem; background:#111827; border:1px solid #334155; border-radius:16px; }
+    h1 { margin-top:0; }
+    .row { display:flex; flex-wrap:wrap; gap:.5rem; margin:.4rem 0; }
+    input, textarea { flex:1 1 260px; padding:.7rem .9rem; border-radius:12px; border:1px solid #334155; background:#0b1220; color:#e2e8f0; }
+    button { padding:.7rem 1rem; border-radius:12px; border:1px solid #374151; background:#2563eb; color:#fff; font-weight:600; cursor:pointer; }
+    button.secondary { background:#1f2937; }
+    .badge { display:inline-block; padding:.25rem .6rem; border:1px solid #334155; border-radius:999px; font-size:.85rem; margin-right:.5rem; }
+    .log { background:#0b1220; border:1px solid #334155; border-radius:12px; padding:.75rem; min-height:2.5rem; white-space:pre-wrap; }
+    .card { border:1px solid #334155; border-radius:12px; padding:1rem; margin:.75rem 0; background:#0e1526; }
+    a { color:#93c5fd; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>StudentProject Dapp</h1>
+    <p>Interact with your deployed <code>StudentProject</code> contract.</p>
+
+    <div class="row">
+      <button id="connect">🔌 Connect Wallet</button>
+      <span id="net" class="badge">Not connected</span>
+      <span id="acct" class="badge">—</span>
+    </div>
+
+    <div class="card">
+      <h3>Contract</h3>
+      <div class="row">
+        <input id="addr" type="text" placeholder="Contract address (0x...)" />
+        <button class="secondary" id="load">Load</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Value</h3>
+      <div class="row">
+        <button class="secondary" id="getValue">getValue()</button>
+        <input id="newValue" type="number" placeholder="e.g. 42" />
+        <button id="setValue">setValue(uint)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Note</h3>
+      <div class="row">
+        <button class="secondary" id="getNote">getNote()</button>
+      </div>
+      <div class="row">
+        <textarea id="newNote" rows="2" placeholder="Your note..."></textarea>
+        <button id="setNote">setNote(string)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Contributions (ETH)</h3>
+      <div class="row">
+        <input id="ethAmount" type="number" step="0.0001" placeholder="Amount in ETH (e.g., 0.01)" />
+        <button id="contribute">contribute() payable</button>
+      </div>
+      <div class="row">
+        <input id="who" type="text" placeholder="Address to check contribution (0x... or leave empty for self)" />
+        <button class="secondary" id="getContribution">getContribution(address)</button>
+      </div>
+      <div class="row">
+        <button class="secondary" id="getBalance">getBalance()</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Owner Actions</h3>
+      <div class="row">
+        <input id="withdrawTo" type="text" placeholder="Withdraw to (0x...)" />
+        <input id="withdrawAmt" type="number" step="0.0001" placeholder="Amount in ETH" />
+        <button id="withdraw">withdraw(to, amount)</button>
+      </div>
+      <p style="opacity:.8">Only the deployer (owner) can withdraw. Try on Remix VM by switching accounts.</p>
+    </div>
+
+    <h3>Output</h3>
+    <div id="out" class="log"></div>
+
+    <p style="opacity:.8;margin-top:1rem">
+      Tips: deploy to <a href="https://remix.ethereum.org" target="_blank" rel="noreferrer">Remix</a> (Remix VM or Sepolia). If using Sepolia, get test ETH from a faucet and ensure MetaMask is on Sepolia.
+    </p>
+  </div>
+
+  <!-- Ethers v6 UMD build -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <script>
+
+    const CONTRACT_ADDRESS = "0xc82e2B02e8dd2490Cf0F3D60e2AACe7F9237bbA4";
+
+    const ABI = [[
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "newValue",
+				"type": "uint256"
+			}
+		],
+		"name": "set",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "newValue",
+				"type": "uint256"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "updater",
+				"type": "address"
+			}
+		],
+		"name": "ValueChanged",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "get",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]
+      ,{ "type":"function", "name":"owner", "stateMutability":"view", "inputs":[], "outputs":[{"type":"address"}] },
+      { "type":"function", "name":"setValue", "stateMutability":"nonpayable", "inputs":[{"type":"uint256","name":"newValue"}], "outputs":[] },
+      { "type":"function", "name":"getValue", "stateMutability":"view", "inputs":[], "outputs":[{"type":"uint256"}] },
+      { "type":"function", "name":"setNote", "stateMutability":"nonpayable", "inputs":[{"type":"string","name":"newNote"}], "outputs":[] },
+      { "type":"function", "name":"getNote", "stateMutability":"view", "inputs":[], "outputs":[{"type":"string"}] },
+      { "type":"function", "name":"contributions", "stateMutability":"view", "inputs":[{"type":"address"}], "outputs":[{"type":"uint256"}] },
+      { "type":"function", "name":"getContribution", "stateMutability":"view", "inputs":[{"type":"address","name":"user"}], "outputs":[{"type":"uint256"}] },
+      { "type":"function", "name":"getBalance", "stateMutability":"view", "inputs":[], "outputs":[{"type":"uint256"}] },
+      { "type":"function", "name":"withdraw", "stateMutability":"nonpayable", "inputs":[{"type":"address","name":"to"},{"type":"uint256","name":"amount"}], "outputs":[] },
+      { "type":"event", "name":"ValueSet", "inputs":[{"indexed":false,"type":"uint256","name":"newValue"},{"indexed":true,"type":"address","name":"setter"}], "anonymous":false },
+      { "type":"event", "name":"NoteSet", "inputs":[{"indexed":false,"type":"string","name":"newNote"},{"indexed":true,"type":"address","name":"setter"}], "anonymous":false },
+      { "type":"event", "name":"Contributed", "inputs":[{"indexed":true,"type":"address","name":"from"},{"indexed":false,"type":"uint256","name":"amount"}], "anonymous":false },
+      { "type":"event", "name":"Withdrawn", "inputs":[{"indexed":true,"type":"address","name":"to"},{"indexed":false,"type":"uint256","name":"amount"}], "anonymous":false }
+    ];
+
+    let provider, signer, contract;
+
+    const $ = (id) => document.getElementById(id);
+    const log = (msg) => { const o = $("out"); o.textContent = (o.textContent ? o.textContent + "\n" : "") + msg; };
+
+    async function connect() {
+      if (!window.ethereum) { alert("MetaMask not found. Please install it."); return; }
+      provider = new ethers.BrowserProvider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      signer = await provider.getSigner();
+      const net = await provider.getNetwork();
+      $("net").textContent = `${net.name} (chainId ${Number(net.chainId)})`;
+      $("acct").textContent = await signer.getAddress();
+      if (!$("addr").value && CONTRACT_ADDRESS) $("addr").value = CONTRACT_ADDRESS;
+      log("✅ Wallet connected");
+    }
+
+    async function loadContract() {
+      const addr = $("addr").value.trim() || CONTRACT_ADDRESS;
+      if (!addr) { alert("Enter contract address"); return; }
+      contract = new ethers.Contract(addr, ABI, signer ?? provider);
+      log(`🧩 Contract loaded: ${addr}`);
+    }
+
+    // ---- reads ----
+    async function readValue() {
+      try { if (!contract) await loadContract();
+        const v = await contract.getValue();
+        log(`getValue() → ${v.toString()}`);
+      } catch (e) { log(`❌ getValue failed: ${e.message || e}`); }
+    }
+
+    async function readNote() {
+      try { if (!contract) await loadContract();
+        const n = await contract.getNote();
+        log(`getNote() → ${n}`);
+      } catch (e) { log(`❌ getNote failed: ${e.message || e}`); }
+    }
+
+    async function readContribution() {
+      try { if (!contract) await loadContract();
+        const who = $("who").value.trim() || (signer ? await signer.getAddress() : null);
+        if (!who) { alert("Connect wallet first or provide an address"); return; }
+        const amt = await contract.getContribution(who);
+        log(`getContribution(${who}) → ${ethers.formatEther(amt)} ETH`);
+      } catch (e) { log(`❌ getContribution failed: ${e.message || e}`); }
+    }
+
+    async function readBalance() {
+      try { if (!contract) await loadContract();
+        const b = await contract.getBalance();
+        log(`getBalance() → ${ethers.formatEther(b)} ETH`);
+      } catch (e) { log(`❌ getBalance failed: ${e.message || e}`); }
+    }
+
+    // ---- writes ----
+    async function writeValue() {
+      try { if (!signer) await connect(); if (!contract) await loadContract();
+        const raw = $("newValue").value;
+        if (raw === "") { alert("Enter a number"); return; }
+        const tx = await contract.connect(signer).setValue(BigInt(raw));
+        log(`⛓️ setValue tx: ${tx.hash}`); await tx.wait(); log("✅ setValue confirmed");
+      } catch (e) { log(`❌ setValue failed: ${e.message || e}`); }
+    }
+
+    async function writeNote() {
+      try { if (!signer) await connect(); if (!contract) await loadContract();
+        const n = $("newNote").value;
+        const tx = await contract.connect(signer).setNote(n);
+        log(`⛓️ setNote tx: ${tx.hash}`); await tx.wait(); log("✅ setNote confirmed");
+      } catch (e) { log(`❌ setNote failed: ${e.message || e}`); }
+    }
+
+    async function sendContribution() {
+      try { if (!signer) await connect(); if (!contract) await loadContract();
+        const eth = $("ethAmount").value;
+        if (!eth || Number(eth) <= 0) { alert("Enter ETH amount > 0"); return; }
+        const tx = await contract.connect(signer).contribute({ value: ethers.parseEther(String(eth)) });
+        log(`⛓️ contribute tx: ${tx.hash}`); await tx.wait(); log("✅ contribute confirmed");
+      } catch (e) { log(`❌ contribute failed: ${e.message || e}`); }
+    }
+
+    async function doWithdraw() {
+      try { if (!signer) await connect(); if (!contract) await loadContract();
+        const to = $("withdrawTo").value.trim();
+        const amt = $("withdrawAmt").value;
+        if (!to || !amt) { alert("Enter 'to' and 'amount'"); return; }
+        const tx = await contract.connect(signer).withdraw(to, ethers.parseEther(String(amt)));
+        log(`⛓️ withdraw tx: ${tx.hash}`); await tx.wait(); log("✅ withdraw confirmed");
+      } catch (e) { log(`❌ withdraw failed: ${e.message || e}`); }
+    }
+
+    // events (optional log to console)
+    function attachEventLogs() {
+      if (!contract) return;
+      try {
+        contract.on("ValueSet", (newValue, setter) => console.log("ValueSet", newValue.toString(), setter));
+        contract.on("NoteSet", (newNote, setter) => console.log("NoteSet", newNote, setter));
+        contract.on("Contributed", (from, amount) => console.log("Contributed", from, ethers.formatEther(amount), "ETH"));
+        contract.on("Withdrawn", (to, amount) => console.log("Withdrawn", to, ethers.formatEther(amount), "ETH"));
+      } catch {}
+    }
+
+    // UI bindings
+    $("connect").onclick = connect;
+    $("load").onclick = async () => { await loadContract(); attachEventLogs(); };
+    $("getValue").onclick = readValue;
+    $("setValue").onclick = writeValue;
+    $("getNote").onclick = readNote;
+    $("setNote").onclick = writeNote;
+    $("contribute").onclick = sendContribution;
+    $("getContribution").onclick = readContribution;
+    $("getBalance").onclick = readBalance;
+    $("withdraw").onclick = doWithdraw;
+
+    // Auto-fill address if constant provided
+    window.addEventListener("load", () => {
+      if (CONTRACT_ADDRESS) $("addr").value = CONTRACT_ADDRESS;
+    });
+
+    // Keep UI fresh on account/network change
+    if (window.ethereum) {
+      window.ethereum.on("chainChanged", () => window.location.reload());
+      window.ethereum.on("accountsChanged", () => window.location.reload());
+    }
+  </script>
+</body>
+</html>
